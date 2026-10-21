@@ -1,0 +1,62 @@
+[
+  {
+    "nbhd_id": 139,
+    "name": "Scarborough Village",
+    "rank": 1,
+    "image": "data/pilot_139.png",
+    "coordinates": [
+      [
+        -79.227741,
+        43.750742
+      ],
+      [
+        -79.205438,
+        43.750742
+      ],
+      [
+        -79.205438,
+        43.727943
+      ],
+      [
+        -79.227741,
+        43.727943
+      ]
+    ],
+    "ground_res_m": 0.63,
+    "shares": {
+      "grass": 0.111,
+      "shrub": 0.022,
+      "tree": 0.523
+    }
+  },
+  {
+    "nbhd_id": 41,
+    "name": "Bridle Path-Sunnybrook-York Mills",
+    "rank": 2,
+    "image": "data/pilot_41.png",
+    "coordinates": [
+      [
+        -79.405305,
+        43.747467
+      ],
+      [
+        -79.354542,
+        43.747467
+      ],
+      [
+        -79.354542,
+        43.711473
+      ],
+      [
+        -79.405305,
+        43.711473
+      ]
+    ],
+    "ground_res_m": 1.02,
+    "shares": {
+      "grass": 0.066,
+      "shrub": 0.016,
+      "tree": 0.54
+    }
+  }
+]

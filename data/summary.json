@@ -1,0 +1,16 @@
+{
+  "generated": "2026-10-21",
+  "top_n": 15,
+  "rank_by": "green_median_m2",
+  "alt_overlap": 12,
+  "income_available": false,
+  "residential_zones": [
+    "RD",
+    "RS",
+    "RT",
+    "R"
+  ],
+  "min_parcels": 30,
+  "parcels_total": 377133,
+  "neighbourhoods_ranked": 148
+}
