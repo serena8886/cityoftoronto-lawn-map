@@ -1,55 +1,39 @@
 <!doctype html>
-<!--
-  ZEOPE 院子绿地优先社区地图（网页地图）
-  =====================================================================
-  这个文件只负责"展示"，不做数据分析：
-    - 数据分析由 Python 脚本完成（03 → 04 → 05 → 06）
-    - 网页只读取和它放在一起的 data/ 文件夹里的几个小文件（脚本输出到 docs/data/，再复制过来）：
-        neighbourhoods.geojson  158 个社区的边界和各项指标（05 生成）
-        summary.json            排名方式、地块总数等说明信息（05 生成）
-        pilots.json + pilots/<编号>.json  前 15 名社区的草/灌木/树矢量细节（06 生成，可选；放大到社区时才加载）
 
-  用到的库：MapLibre GL JS（开源网页地图库，用法和 Mapbox GL JS 基本一样，不需要 token）
-  底图：Esri 卫星图（默认）、Esri 浅灰底图 + 地名标注（免费，不需要 API key，地图右下角注明了出处）
-  （之前用的 CARTO 底图现在要求 API key，否则会出现 "API KEY REQUIRED" 水印，所以换掉了）
-
-  本地预览：在这个文件所在的文件夹里运行 python3 -m http.server，然后打开 http://localhost:8000
-  （直接双击这个文件打不开数据，因为浏览器不允许 file:// 页面读取旁边的文件）
--->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ZEOPE Lawn Priority Map</title>
-<!-- 不让搜索引擎收录（草稿阶段）。正式公开后可以删掉这一行 -->
+<!-- Keep search engines from indexing the page while it is a draft. Remove this line once it is public. -->
 <meta name="robots" content="noindex, nofollow">
-<!-- MapLibre GL JS 的样式表和脚本，固定版本 4.7.1，从 unpkg CDN 加载 -->
+<!-- MapLibre GL JS stylesheet and script, pinned to version 4.7.1, loaded from the unpkg CDN -->
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>
   /* =====================================================================
-     颜色和尺寸变量：想改配色，改这里就行
+     Colour and size variables: change the colour scheme here
      ===================================================================== */
   :root {
     --bg: #ffffff;
     --panel: #ffffff;
-    --ink: #1d2a24;          /* 正文颜色 */
-    --muted: #5d6b64;        /* 次要文字颜色 */
-    --line: #e3e8e5;         /* 分隔线、边框 */
-    --accent: #1f6b45;       /* 主色（深绿），用于选中状态、按钮 */
-    --accent-soft: #e8f3ec;  /* 主色的浅色背景 */
-    --gold: #e0a100;         /* 前 15 名的金色描边 */
-    --draft: #b3261e;        /* "Draft" 标签的红色 */
-    /* 分级图的 5 档绿色，从浅到深（和下面 JS 里的 COLORS 保持一致） */
+    --ink: #1d2a24;          /* body text */
+    --muted: #5d6b64;        /* secondary text */
+    --line: #e3e8e5;         /* dividers and borders */
+    --accent: #1f6b45;       /* main colour (dark green) for selected states and buttons */
+    --accent-soft: #e8f3ec;  /* light background of the main colour */
+    --gold: #e0a100;         /* gold outline of the top 15 */
+    --draft: #b3261e;        /* red of the "Draft" label */
+    /* 5 greens of the choropleth, light to dark (keep in sync with COLORS in the JS below) */
     --c0: #edf8e9; --c1: #bae4b3; --c2: #74c476; --c3: #31a354; --c4: #006d2c;
-    --na: #d4d8d6;           /* 不参与排名的社区（灰色） */
-    /* 细节图里草 / 灌木 / 树的颜色（和 scripts/config.py 的 PILOT_COLORS 保持一致） */
+    --na: #d4d8d6;           /* neighbourhoods not ranked (grey) */
+    /* grass / shrub / tree colours of the detail layer (keep in sync with DETAIL_COLORS in the JS below) */
     --grass: rgb(163,217,119); --shrub: rgb(128,128,0); --tree: rgb(34,102,51);
-    --sidebar: 380px;        /* 电脑上侧边栏的宽度 */
+    --sidebar: 380px;        /* sidebar width on desktop */
   }
 
   /* =====================================================================
-     整体布局：左边侧边栏 + 右边地图
+     Overall layout: sidebar on the left, map on the right
      ===================================================================== */
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
@@ -57,10 +41,10 @@
   #app { display: flex; height: 100%; }
   #map { flex: 1; min-width: 0; position: relative; }
 
-  /* 侧边栏 */
+  /* Sidebar */
   aside { width: var(--sidebar); flex: none; background: var(--panel); border-right: 1px solid var(--line);
     overflow-y: auto; display: flex; flex-direction: column; }
-  .sheet-handle { display: none; }   /* 手机上才显示的拖动条 */
+  .sheet-handle { display: none; }   /* drag handle, shown on phones only */
   header { padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
   .draft { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
     color: var(--draft); border: 1px solid currentColor; border-radius: 3px; padding: 1px 6px; margin-bottom: 8px; }
@@ -69,7 +53,7 @@
   section { padding: 14px 20px; border-bottom: 1px solid var(--line); }
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
 
-  /* "Colour neighbourhoods by" 的单选按钮组 */
+  /* "Colour neighbourhoods by" radio buttons */
   .seg { display: grid; grid-template-columns: 1fr; gap: 4px; }
   .seg label { display: flex; gap: 8px; align-items: flex-start; padding: 7px 10px; border: 1px solid var(--line);
     border-radius: 6px; cursor: pointer; }
@@ -77,7 +61,7 @@
   .seg label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
   .seg small { display: block; color: var(--muted); font-size: 12px; }
 
-  /* 图例：5 档色带 + 每档的起始数值 */
+  /* Legend: 5-class colour ramp + the starting value of each class */
   .legend { margin-top: 12px; }
   .ramp { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; }
   .ramp span { height: 12px; }
@@ -91,7 +75,7 @@
   .toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
   .toggle input { accent-color: var(--accent); }
 
-  /* 前 15 名列表 */
+  /* Top 15 list */
   ol.top { list-style: none; margin: 0; padding: 0; }
   ol.top li { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: baseline;
     padding: 6px 4px; border-radius: 5px; cursor: pointer; }
@@ -99,7 +83,7 @@
   ol.top .rk { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; text-align: right; }
   ol.top .val { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
 
-  /* 圆角按钮（试点社区按钮）和滑块 */
+  /* Pill buttons and sliders */
   .btns { display: flex; flex-wrap: wrap; gap: 6px; }
   button.chip { font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line);
     background: #fff; color: var(--ink); cursor: pointer; }
@@ -107,7 +91,7 @@
   button.chip[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
   input[type=range] { width: 100%; accent-color: var(--accent); }
 
-  /* 可展开的 Method / Limitations / Data sources */
+  /* Collapsible Method / Limitations / Data sources */
   details { font-size: 13px; }
   details + details { margin-top: 8px; }
   summary { cursor: pointer; font-weight: 600; }
@@ -120,16 +104,16 @@
   .detail-toggles input { margin: 0; accent-color: var(--accent); }
 
   /* =====================================================================
-     地图上的元素
+     Elements on the map
      ===================================================================== */
-  /* 地图左上角的 Satellite / Light gray 切换按钮 */
+  /* Satellite / Light gray switch, top left of the map */
   .basectl { position: absolute; top: 10px; left: 10px; z-index: 2; display: flex; background: #fff;
     border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.25); overflow: hidden; }
   .basectl button { font: 600 13px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; border: 0;
     background: #fff; color: var(--ink); padding: 9px 14px; cursor: pointer; }
   .basectl button[aria-pressed="true"] { background: var(--accent); color: #fff; }
 
-  /* 点击社区后弹出的信息框 */
+  /* Popup shown when a neighbourhood is clicked */
   .maplibregl-popup-content { font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 12px 14px; min-width: 220px; }
   .pp h3 { font-size: 15px; margin: 0 0 2px; }
   .pp .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
@@ -141,15 +125,15 @@
   .pp .links { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; }
   .pp .links a { color: var(--accent); font-weight: 600; text-decoration: none; margin-right: 12px; white-space: nowrap; }
   .pp .links a:hover { text-decoration: underline; }
-  /* 弹窗里草 / 灌木 / 树占比的横条 */
+  /* Grass / shrub / tree share bar inside the popup */
   .bar { display: flex; height: 8px; border-radius: 2px; overflow: hidden; margin: 6px 0 2px; background: #eee; }
 
-  /* 数据加载中 / 加载失败时盖在地图上的提示 */
+  /* Message over the map while data loads, or if loading fails */
   #loading { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(255,255,255,.8);
     font-size: 14px; color: var(--muted); z-index: 5; }
 
   /* =====================================================================
-     手机（屏幕宽度 ≤ 760px）：侧边栏变成可以收起的底部面板
+     Phones (screen width ≤ 760px): the sidebar becomes a collapsible bottom sheet
      ===================================================================== */
   @media (max-width: 760px) {
     #app { flex-direction: column; }
@@ -157,7 +141,7 @@
     aside { position: absolute; left: 0; right: 0; bottom: 0; width: auto; max-height: 72vh; z-index: 3;
       border-right: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0;
       box-shadow: 0 -6px 24px rgba(0,0,0,.12); transition: transform .25s ease; }
-    aside.collapsed { transform: translateY(calc(100% - 92px)); }   /* 收起时只露出标题部分 */
+    aside.collapsed { transform: translateY(calc(100% - 92px)); }   /* when collapsed, only the header shows */
     .sheet-handle { display: block; width: 100%; border: 0; background: none; padding: 8px 0 0; cursor: pointer; }
     .sheet-handle span { display: block; width: 40px; height: 4px; border-radius: 2px; background: #c5ccc8; margin: 0 auto; }
     header { padding: 8px 16px 12px; }
@@ -170,35 +154,35 @@
 <div id="app">
 
   <!-- =====================================================================
-       侧边栏（手机上是底部面板）
+       Sidebar (a bottom sheet on phones)
        ===================================================================== -->
   <aside id="panel">
-    <!-- 手机上点这个拖动条展开 / 收起面板 -->
+    <!-- On phones, tap this handle to expand / collapse the panel -->
     <button class="sheet-handle" id="handle" aria-label="Show or hide panel"><span></span></button>
 
-    <!-- 标题。正式公开后可以删掉 "Draft" 标签 -->
+    <!-- Title. Remove the "Draft" label once the map is public -->
     <header>
       <div class="draft">Draft – for internal review</div>
       <h1>Where Toronto's big green yards are</h1>
       <p class="sub">Priority neighbourhoods for the ZEOPE “Leave the Leaves for Pollinators” seed-card mail-out</p>
     </header>
 
-    <!-- 选择用哪个指标给社区上色。value 对应 neighbourhoods.geojson 里的字段名 -->
+    <!-- Choose which measure colours the neighbourhoods. Each value is a field name in neighbourhoods.geojson -->
     <section>
       <h2>Colour neighbourhoods by</h2>
       <div class="seg" id="metric">
-        <!-- 第一项是排名用的指标；文字和 value 会按 summary.json 里的 rank_by 自动调整（见 renderMethod） -->
+        <!-- The first option is the ranking measure; its text and value follow rank_by in summary.json (see renderMethod) -->
         <label><input type="radio" name="m" value="green_median_m2" id="rankRadio" checked>
           <span><span id="rankLabel">Yard green space per lot</span><small id="rankDesc">Grass + shrub + tree on a typical low-density residential lot · used for the ranking</small></span></label>
         <label id="lawnOpt"><input type="radio" name="m" value="lawn_median_m2">
           <span>Visible lawn per lot<small>Grass not covered by tree canopy, on a typical lot</small></span></label>
         <label><input type="radio" name="m" value="pct_tree">
           <span>Tree canopy share<small>Tree canopy as a share of low-density residential land</small></span></label>
-        <!-- 只有提供了普查数据（Neighbourhood Profiles）才会显示，否则自动删除 -->
+        <!-- Only shown when census data (Neighbourhood Profiles) is available; removed otherwise -->
         <label id="incomeOpt"><input type="radio" name="m" value="income_median">
           <span>Household income<small>Median household income, 2021 Census · for reference only</small></span></label>
       </div>
-      <!-- 图例：5 档颜色；每档的起始数值由 JS 按五分位计算后填进 #ticks -->
+      <!-- Legend: 5 colour classes; JS computes the quintile breaks and fills in #ticks -->
       <div class="legend">
         <div class="ramp"><span style="background:var(--c0)"></span><span style="background:var(--c1)"></span><span style="background:var(--c2)"></span><span style="background:var(--c3)"></span><span style="background:var(--c4)"></span></div>
         <div class="ticks" id="ticks"></div>
@@ -209,30 +193,30 @@
       </div>
     </section>
 
-    <!-- 前 15 名列表（由 renderTopList 生成），点击会定位到该社区 -->
+    <!-- Top 15 list (built by renderTopList); clicking a name zooms to that neighbourhood -->
     <section>
       <div class="row"><h2 style="margin:0">Top <span class="topn">15</span> neighbourhoods</h2>
         <label class="toggle"><input type="checkbox" id="showTop" checked> Outline on map</label></div>
       <ol class="top" id="toplist" style="margin-top:8px"></ol>
     </section>
 
-    <!-- 草 / 灌木 / 树细节（矢量）。没有 pilots.json 时整个区块保持隐藏 -->
+    <!-- Grass / shrub / tree detail (vector). The whole section stays hidden if there is no pilots.json -->
     <section id="pilotSection" hidden>
       <h2>Lawn, shrub and tree detail</h2>
       <p class="fine" style="margin-top:0">Available for the top <span class="topn">15</span> neighbourhoods. Zoom in, or click a name in the list above, and the detail loads automatically. Click any patch to see its size. Lower the opacity below to compare with the satellite imagery underneath.</p>
-      <!-- 三个勾选框：分别显示 / 隐藏草、灌木、树 -->
+      <!-- Three checkboxes to show / hide grass, shrub and tree -->
       <div class="keys detail-toggles">
         <label><input type="checkbox" data-cls="grass" checked><span class="sw" style="background:var(--grass)"></span>Lawn (grass)</label>
         <label><input type="checkbox" data-cls="shrub" checked><span class="sw" style="background:var(--shrub)"></span>Shrub</label>
         <label><input type="checkbox" data-cls="tree" checked><span class="sw" style="background:var(--tree)"></span>Tree</label>
       </div>
-      <!-- 细节图层透明度：拉到最左边就能完全看到下面的卫星图 -->
+      <!-- Detail layer opacity: drag fully left to see the satellite imagery underneath -->
       <label class="fine" for="opacity">Detail layer opacity</label>
       <input type="range" id="opacity" min="0" max="100" value="85">
       <p class="fine" id="detailStatus" style="margin:6px 0 0"></p>
     </section>
 
-    <!-- 方法、局限、数据来源。Method 的内容由 renderMethod 根据 summary.json 生成 -->
+    <!-- Method, limitations, data sources. The Method text is generated by renderMethod from summary.json -->
     <section>
       <details>
         <summary>Method</summary>
@@ -259,16 +243,16 @@
         </ul>
         <p class="fine">All from City of Toronto Open Data. Contains information licensed under the Open Government Licence – Toronto.</p>
       </details>
-      <!-- 数据处理日期（来自 summary.json） -->
+      <!-- Date the data was processed (from summary.json) -->
       <p class="fine" id="gen" style="margin-bottom:0"></p>
     </section>
   </aside>
 
   <!-- =====================================================================
-       地图区域
+       Map area
        ===================================================================== -->
   <div id="map"><div id="loading">Loading…</div>
-    <!-- 左上角的底图切换按钮：默认卫星图，浅灰底图是第二选择 -->
+    <!-- Base map switch, top left: satellite by default, light gray as the second option -->
     <div class="basectl" role="group" aria-label="Base map">
       <button data-base="sat" aria-pressed="true">Satellite</button>
       <button data-base="light" aria-pressed="false">Light gray</button>
@@ -278,103 +262,103 @@
 
 <script>
 // =====================================================================
-// 1. 常量和格式化工具
+// 1. Constants and number formatting
 // =====================================================================
 
-// 分级图的 5 档颜色（从浅到深），和 CSS 里的 --c0 ~ --c4 一致
+// The 5 choropleth colours (light to dark), same as --c0 to --c4 in the CSS
 const COLORS = ['#edf8e9', '#bae4b3', '#74c476', '#31a354', '#006d2c'];
-const NA = '#d4d8d6', GOLD = '#e0a100';   // 不参与排名的灰色、前 15 名的金色
+const NA = '#d4d8d6', GOLD = '#e0a100';   // grey for neighbourhoods not ranked, gold for the top 15
 
-// 每个指标的显示名称和数字格式。键名 = neighbourhoods.geojson 里的字段名
+// Display name and number format of each measure. Keys = field names in neighbourhoods.geojson
 const m2 = v => Math.round(v).toLocaleString() + ' m²';
 const METRICS = {
-  green_median_m2: { label: 'Yard green space per lot', fmt: m2 },              // 院子绿地（草+灌木+树）中位数
-  green_mean_m2: { label: 'Yard green space per lot (average)', fmt: m2 },      // 院子绿地平均数
-  lawn_median_m2: { label: 'Visible lawn per lot', fmt: m2 },                   // 可见草坪中位数
-  lawn_mean_m2: { label: 'Visible lawn per lot (average)', fmt: m2 },           // 可见草坪平均数
-  pct_tree: { label: 'Tree canopy share', fmt: v => (v * 100).toFixed(0) + '%' },  // 树冠占住宅用地比例
-  pct_lawn: { label: 'Lawn share', fmt: v => (v * 100).toFixed(0) + '%' },          // 草坪占住宅用地比例
+  green_median_m2: { label: 'Yard green space per lot', fmt: m2 },              // yard green space (grass + shrub + tree), median
+  green_mean_m2: { label: 'Yard green space per lot (average)', fmt: m2 },      // yard green space, mean
+  lawn_median_m2: { label: 'Visible lawn per lot', fmt: m2 },                   // visible lawn, median
+  lawn_mean_m2: { label: 'Visible lawn per lot (average)', fmt: m2 },           // visible lawn, mean
+  pct_tree: { label: 'Tree canopy share', fmt: v => (v * 100).toFixed(0) + '%' },  // tree canopy as a share of residential land
+  pct_lawn: { label: 'Lawn share', fmt: v => (v * 100).toFixed(0) + '%' },          // lawn as a share of residential land
   income_median: { label: 'Household income', fmt: v => '$' + (v >= 1e5 ? (v / 1e3).toFixed(0) + 'k' : Math.round(v / 1e3) + 'k') },
 };
 const pct = v => v == null ? '–' : (v * 100).toFixed(0) + '%';      // 0.123 → "12%"
 const num = v => v == null ? '–' : Math.round(v).toLocaleString();  // 1234.5 → "1,235"
 
-// 多伦多市的大致范围（西南角、东北角的经纬度），地图一打开就显示这个范围
+// Rough extent of the City of Toronto (south-west and north-east corners); the map opens on this view
 const TORONTO = [[-79.64, 43.58], [-79.11, 43.86]];
 
 
 // =====================================================================
-// 2. 创建地图和底图
+// 2. Create the map and base maps
 // =====================================================================
 const map = new maplibregl.Map({
   container: 'map',
   bounds: TORONTO, fitBoundsOptions: { padding: 20 },
-  maxBounds: [[-80.2, 43.3], [-78.6, 44.1]],   // 限制拖动范围，不让地图拖出多伦多太远
+  maxBounds: [[-80.2, 43.3], [-78.6, 44.1]],   // keep panning from drifting far away from Toronto
   attributionControl: { compact: true, customAttribution: 'Contains information licensed under the Open Government Licence – Toronto' },
   style: {
     version: 8,
     sources: {
-      // Esri 浅灰底图（Light Gray Canvas，免费、不需要 key）。
-      // maxzoom 16：再放大时沿用 16 级的瓦片放大显示（更高级别的瓦片很多地方没有）
+      // Esri Light Gray Canvas (free, no API key needed).
+      // maxzoom 16: beyond zoom 16 the level-16 tiles are scaled up (higher levels are missing in many places)
       light: { type: 'raster', tileSize: 256, maxzoom: 16,
         tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'],
         attribution: 'Basemap © Esri, HERE, Garmin, © OpenStreetMap contributors' },
-      // Esri 浅灰底图的地名和街道名标注（透明背景），叠在社区颜色上面
+      // Esri Light Gray place and street labels (transparent background), drawn above the neighbourhood colours
       ref: { type: 'raster', tileSize: 256, maxzoom: 16,
         tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}'] },
-      // Esri 卫星图（免费，需注明 Esri）
+      // Esri World Imagery (free; Esri must be credited)
       sat: { type: 'raster', tileSize: 256, maxzoom: 19,
         tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
         attribution: 'Imagery © Esri, Maxar, Earthstar Geographics' },
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#f4f5f4' } },
-      // 默认显示卫星图；浅灰底图和地名标注默认隐藏，点 "Light gray" 才显示
+      // Satellite is shown by default; the light gray base map and labels stay hidden until "Light gray" is clicked
       { id: 'light', type: 'raster', source: 'light', layout: { visibility: 'none' } },
       { id: 'sat', type: 'raster', source: 'sat' },
-      { id: 'ref', type: 'raster', source: 'ref', layout: { visibility: 'none' } },   // 地名标注放在最上层；社区图层会插到它下面（见第 5 部分）
+      { id: 'ref', type: 'raster', source: 'ref', layout: { visibility: 'none' } },   // labels on top; neighbourhood layers are inserted below them (see part 5)
     ],
   },
 });
-map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');   // 右上角的 + / − 缩放按钮
-map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');         // 右下角比例尺
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');   // + / − zoom buttons, top right
+map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');         // scale bar, bottom right
 
-// 社区填充色的透明度，按底图不同而不同：
-//   sat（卫星图）：越放大越透明，放大到街区级别（zoom 14）完全透明，只留边界线，方便看实景
-//   light（街道图）：在数据加载后设置（见第 5 部分），试点社区放大后会变淡，露出细节图
+// Opacity of the neighbourhood fill depends on the base map:
+//   sat: fades as you zoom in and is fully transparent at street level (zoom 14), leaving only the outlines so the imagery shows
+//   light: set once the data loads (see part 5); neighbourhoods with detail data fade when zoomed in so the detail shows
 const OPACITY = { sat: ['interpolate', ['linear'], ['zoom'], 10, 0.65, 12.5, 0.3, 14, 0] };
-// 社区边界线的粗细：鼠标悬停时加粗；卫星图模式下整体更粗，方便看清
+// Neighbourhood outline width: thicker on hover, and thicker overall on satellite so it stays visible
 const LINE_W = {
   light: ['case', ['boolean', ['feature-state', 'hover'], false], 2, 0.7],
   sat: ['case', ['boolean', ['feature-state', 'hover'], false], 3, 1.6],
 };
 
-// 全局状态
-let base = 'sat';                   // 当前底图：'sat'（卫星图，默认）或 'light'（浅灰底图）
+// Global state
+let base = 'sat';                   // current base map: 'sat' (satellite, default) or 'light' (light gray)
 let data, summary = {}, pilots = [], metric = 'green_median_m2', hoverId = null;
-const byId = new Map();             // 社区编号 → GeoJSON 要素，方便按编号查找
+const byId = new Map();             // neighbourhood id → GeoJSON feature, for quick lookup
 
 
 // =====================================================================
-// 3. 分级上色
+// 3. Choropleth colouring
 // =====================================================================
 
-// 五分位切分点：把数值从小到大排好，取 20%、40%、60%、80% 位置的值，
-// 这样 5 档颜色里每档的社区数量大致相同
+// Quintile breaks: sort the values and take the ones at 20%, 40%, 60% and 80%,
+// so each of the 5 colour classes holds roughly the same number of neighbourhoods
 function quantileBreaks(values) {
   const v = values.filter(x => x != null && isFinite(x)).sort((a, b) => a - b);
   if (!v.length) return [0, 0, 0, 0];
   return [0.2, 0.4, 0.6, 0.8].map(q => v[Math.min(v.length - 1, Math.floor(q * v.length))]);
 }
 
-// 生成某个指标的 MapLibre 上色表达式，同时更新图例里的数值
-//   只用参与排名的社区（eligible）计算切分点；不参与排名或没有数据的社区涂成灰色
+// Build the MapLibre colour expression for a measure and update the legend values
+//   Breaks use ranked (eligible) neighbourhoods only; unranked or missing ones are grey
 function fillColor(m) {
   const vals = data.features.filter(f => f.properties.eligible).map(f => f.properties[m]);
   const br = quantileBreaks(vals);
   const ticks = [Math.min(...vals.filter(x => x != null)), ...br];
   document.getElementById('ticks').innerHTML = ticks.map(t => `<span>${METRICS[m].fmt(t)}+</span>`).join('');
-  // step 表达式：小于第 1 个切分点用 COLORS[0]，以此类推
+  // step expression: below the first break use COLORS[0], and so on
   const step = ['step', ['to-number', ['get', m], 0], COLORS[0]];
   br.forEach((b, i) => step.push(b, COLORS[i + 1]));
   return ['case', ['all', ['==', ['get', 'eligible'], true], ['!=', ['get', m], null]], step, NA];
@@ -382,12 +366,12 @@ function fillColor(m) {
 
 
 // =====================================================================
-// 4. 弹窗、定位、列表、说明文字
+// 4. Popups, zooming, the top-15 list and the Method text
 // =====================================================================
 
-// 生成弹窗内容。p = 社区的属性；ll = 点击位置 [经度, 纬度]，用来生成 Google 卫星图 / 街景链接
+// Popup content. p = neighbourhood properties; ll = clicked point [lng, lat], used for the Google satellite / Street View links
 function popupHTML(p, ll) {
-  const at = ll ? `${ll[1].toFixed(6)},${ll[0].toFixed(6)}` : null;   // Google 地图要求 "纬度,经度" 的顺序
+  const at = ll ? `${ll[1].toFixed(6)},${ll[0].toFixed(6)}` : null;   // Google Maps expects "lat,lng"
   const links = at ? `<div class="links">
       <a href="https://www.google.com/maps/@?api=1&map_action=map&center=${at}&zoom=18&basemap=satellite" target="_blank" rel="noopener">Google satellite ↗</a>
       <a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${at}" target="_blank" rel="noopener">Street View ↗</a></div>` : '';
@@ -395,7 +379,7 @@ function popupHTML(p, ll) {
   const head = p.eligible
     ? `Rank <b>${p.rank}</b> of ${N}${p.top ? '<span class="badge">TOP ' + (summary.top_n || 15) + '</span>' : ''}`
     : 'Not ranked (too few low-density residential lots)';
-  const g = p.pct_lawn || 0, s = p.pct_shrub || 0, t = p.pct_tree || 0;   // 横条的三段宽度
+  const g = p.pct_lawn || 0, s = p.pct_shrub || 0, t = p.pct_tree || 0;   // widths of the three bar segments
   return `<div class="pp"><h3>${p.nbhd_name}</h3><div class="meta">#${p.nbhd_id} · ${head}</div>
     <table>
       <tr><td><b>Yard green space per lot</b></td><td><b>${num(p.green_median_m2)} m²</b></td></tr>
@@ -411,14 +395,14 @@ function popupHTML(p, ll) {
     </table>` : ''}${links}</div>`;
 }
 
-// 在地图上打开弹窗（同一时间只保留一个）
+// Open a popup on the map (only one at a time)
 let popup = new maplibregl.Popup({ maxWidth: '300px' });
 function openPopup(f, lngLat) {
   popup.remove();
   popup = new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(lngLat).setHTML(popupHTML(f.properties, Array.isArray(lngLat) ? lngLat : [lngLat.lng, lngLat.lat])).addTo(map);
 }
 
-// 计算一个多边形的外接矩形 [[西, 南], [东, 北]]，用来把地图缩放到这个社区
+// Bounding box of a polygon [[west, south], [east, north]], used to zoom to a neighbourhood
 function bbox(geom) {
   let b = [Infinity, Infinity, -Infinity, -Infinity];
   const walk = c => typeof c[0] === 'number'
@@ -428,19 +412,19 @@ function bbox(geom) {
   return [[b[0], b[1]], [b[2], b[3]]];
 }
 
-// 缩放到某个社区并打开它的弹窗（点击前 15 名列表时调用）
+// Zoom to a neighbourhood and open its popup (called from the top-15 list)
 function flyToNbhd(id) {
   const f = byId.get(id);
   if (!f) return;
   const b = bbox(f.geometry);
   map.fitBounds(b, { padding: 60, maxZoom: 14.5 });
   openPopup(f, [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2]);
-  const p = pilots.find(x => x.nbhd_id === id);   // 有细节数据的社区：顺便加载
+  const p = pilots.find(x => x.nbhd_id === id);   // if it has detail data, load it as well
   if (p) loadDetail(p);
-  if (matchMedia('(max-width: 760px)').matches) document.getElementById('panel').classList.add('collapsed');   // 手机上收起面板
+  if (matchMedia('(max-width: 760px)').matches) document.getElementById('panel').classList.add('collapsed');   // collapse the panel on phones
 }
 
-// 生成前 15 名列表：按 rank 排序，右侧显示当前选中指标的数值
+// Build the top-15 list, sorted by rank, showing the selected measure on the right
 function renderTopList() {
   const top = data.features.map(f => f.properties).filter(p => p.top).sort((a, b) => a.rank - b.rank);
   const ol = document.getElementById('toplist');
@@ -450,12 +434,12 @@ function renderTopList() {
   ol.querySelectorAll('li[data-id]').forEach(li => {
     const go = () => flyToNbhd(+li.dataset.id);
     li.onclick = go;
-    li.onkeydown = e => { if (e.key === 'Enter') go(); };   // 键盘也能操作
+    li.onkeydown = e => { if (e.key === 'Enter') go(); };   // keyboard accessible
   });
 }
 
-// 各种排名方式对应的文字：[单选按钮标题, 按钮说明, Method 里的描述]
-// 对应 scripts/config.py 里 RANK_BY 的可选值
+// Text for each ranking method: [radio button title, button description, Method wording]
+// Matches the possible values of RANK_BY in scripts/config.py
 const RANK_INFO = {
   green_median_m2: ['Yard green space per lot', 'Grass + shrub + tree on a typical low-density residential lot · used for the ranking', 'median yard green space (grass + shrub + tree) per residential lot'],
   green_mean_m2: ['Yard green space per lot', 'Average grass + shrub + tree per low-density residential lot · used for the ranking', 'average yard green space (grass + shrub + tree) per residential lot'],
@@ -463,8 +447,8 @@ const RANK_INFO = {
   lawn_mean_m2: ['Visible lawn per lot', 'Average grass per low-density residential lot · used for the ranking', 'average visible lawn area per residential lot'],
 };
 
-// 根据 summary.json 填写 Method 说明，并调整第一个单选按钮的文字和指标
-// 这样改了 config.py 的 RANK_BY、重跑 05 之后，网页会自动跟着变，不用改这个文件
+// Fill in the Method text from summary.json and set the first radio button's text and measure,
+// so changing RANK_BY in config.py and rerunning step 05 updates the page without editing this file
 function renderMethod() {
   const zones = (summary.residential_zones || []).join(', ');
   const by = RANK_INFO[summary.rank_by] ? summary.rank_by : 'green_median_m2';
@@ -483,28 +467,28 @@ function renderMethod() {
   r.value = by;
   document.getElementById('rankLabel').textContent = RANK_INFO[by][0];
   document.getElementById('rankDesc').textContent = RANK_INFO[by][1];
-  if (!green) document.getElementById('lawnOpt').remove();            // 如果本来就按草坪排名，不重复显示草坪选项
+  if (!green) document.getElementById('lawnOpt').remove();            // if ranking is already by lawn, don't show the lawn option twice
   metric = r.value;
-  if (!summary.income_available) document.getElementById('incomeOpt').remove();   // 没有普查数据就不显示收入选项
+  if (!summary.income_available) document.getElementById('incomeOpt').remove();   // no census data → no income option
   document.querySelectorAll('.topn').forEach(el => el.textContent = summary.top_n || 15);
   document.getElementById('minp').textContent = summary.min_parcels || 30;
   if (summary.generated) document.getElementById('gen').textContent = `Data processed ${summary.generated}.`;
 }
 
 // ---------------------------------------------------------------------
-// 草 / 灌木 / 树细节（矢量）
-//   pilots.json 列出有细节数据的社区（默认前 15 名），每个社区一个文件 data/pilots/<编号>.json。
-//   为了让网页打开得快，一开始不加载这些文件：放大到某个社区（或点列表里的名字）时才去读，
-//   读进来的多边形都放进同一个图层 detail-fill。
+// Grass / shrub / tree detail (vector)
+//   pilots.json lists the neighbourhoods with detail data (the top 15 by default), one file each: data/pilots/<id>.json.
+//   To keep the page fast, these files are not loaded at start: a file is fetched when you zoom into that neighbourhood (or click its name),
+//   and all loaded polygons go into one layer, detail-fill.
 // ---------------------------------------------------------------------
-const DETAIL_COLORS = { grass: '#a3d977', shrub: '#808000', tree: '#226633' };   // 和 CSS 的 --grass / --shrub / --tree 一致
+const DETAIL_COLORS = { grass: '#a3d977', shrub: '#808000', tree: '#226633' };   // same as --grass / --shrub / --tree in the CSS
 const DETAIL_LABELS = { grass: 'Lawn (grass)', shrub: 'Shrub', tree: 'Tree canopy' };
-const DETAIL_AUTOLOAD_ZOOM = 12.5;      // 放大到这个级别以上，自动加载画面里的社区
-const detailState = new Map();          // 社区编号 → 'loading' / 'done'
-const detailFC = { type: 'FeatureCollection', features: [] };   // 已加载的所有细节多边形
-const detailOn = { grass: true, shrub: true, tree: true };      // 三个勾选框的状态
+const DETAIL_AUTOLOAD_ZOOM = 12.5;      // at or above this zoom, neighbourhoods in view load automatically
+const detailState = new Map();          // neighbourhood id → 'loading' / 'done'
+const detailFC = { type: 'FeatureCollection', features: [] };   // all detail polygons loaded so far
+const detailOn = { grass: true, shrub: true, tree: true };      // state of the three checkboxes
 
-// 只显示勾选了的类别
+// Show only the checked classes
 function detailFilter() {
   return ['in', ['get', 'cls'], ['literal', Object.keys(detailOn).filter(k => detailOn[k])]];
 }
@@ -516,37 +500,37 @@ function detailStatus() {
     (loading ? 'Loading… ' : '') + `Detail loaded for ${done} of ${pilots.length} neighbourhoods.`;
 }
 
-// 读取一个社区的细节文件，并加进 detail 图层
+// Fetch one neighbourhood's detail file and add it to the detail layer
 async function loadDetail(p) {
-  if (detailState.has(p.nbhd_id)) return;       // 已经读过或正在读
+  if (detailState.has(p.nbhd_id)) return;       // already loaded or loading
   detailState.set(p.nbhd_id, 'loading'); detailStatus();
   try {
     const r = await fetch(p.file);
     if (!r.ok) throw new Error(r.status);
     const gj = await r.json();
-    gj.features.forEach(f => { f.properties.nbhd = p.name; });   // 记下属于哪个社区，弹窗里显示
+    gj.features.forEach(f => { f.properties.nbhd = p.name; });   // remember the neighbourhood, shown in the popup
     detailFC.features.push(...gj.features);
     map.getSource('detail').setData(detailFC);
     detailState.set(p.nbhd_id, 'done');
   } catch (err) {
-    detailState.delete(p.nbhd_id);              // 读取失败：下次移动地图时再试
+    detailState.delete(p.nbhd_id);              // failed: try again next time the map moves
     console.warn('Could not load detail for', p.name, err);
   }
   detailStatus();
 }
 
-// 地图停止移动后：如果已经放大到一定程度，加载画面范围内的社区
+// After the map stops moving: if zoomed in far enough, load the neighbourhoods in view
 function loadVisibleDetail() {
   if (map.getZoom() < DETAIL_AUTOLOAD_ZOOM) return;
   const v = map.getBounds();
   pilots.forEach(p => {
-    const [w, s, e, n] = p.bounds;              // 社区细节数据的范围 [西, 南, 东, 北]
+    const [w, s, e, n] = p.bounds;              // extent of the detail data [west, south, east, north]
     const visible = !(e < v.getWest() || w > v.getEast() || n < v.getSouth() || s > v.getNorth());
     if (visible) loadDetail(p);
   });
 }
 
-// 点击单块草地 / 灌木 / 树冠时的弹窗
+// Popup for a single grass / shrub / tree patch
 function detailPopupHTML(f, ll) {
   const at = `${ll.lat.toFixed(6)},${ll.lng.toFixed(6)}`;
   const c = f.properties.cls;
@@ -559,12 +543,12 @@ function detailPopupHTML(f, ll) {
       <a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${at}" target="_blank" rel="noopener">Street View ↗</a></div></div>`;
 }
 
-// 建立细节图层、勾选框、透明度滑块，并开始监听地图移动
+// Set up the detail layer, checkboxes and opacity slider, and start listening for map moves
 function setupDetail() {
   if (!pilots.length) return;
   document.getElementById('pilotSection').hidden = false;
   map.addSource('detail', { type: 'geojson', data: detailFC });
-  // 插在社区边界线（nb-line）下面；缩小到 11 级以下就不显示（太小看不清）
+  // inserted below the outlines (nb-line); hidden below zoom 11, where it is too small to read
   map.addLayer({ id: 'detail-fill', type: 'fill', source: 'detail', minzoom: 11, filter: detailFilter(), paint: {
     'fill-color': ['match', ['get', 'cls'], 'grass', DETAIL_COLORS.grass, 'shrub', DETAIL_COLORS.shrub, 'tree', DETAIL_COLORS.tree, '#999999'],
     'fill-opacity': 0.85,
@@ -589,45 +573,45 @@ function setupDetail() {
 
 
 // =====================================================================
-// 5. 读取数据并画图（三个数据文件都读完、地图也加载好之后才执行）
+// 5. Load the data and draw (runs once all three data files and the map have loaded)
 // =====================================================================
 Promise.all([
   fetch('data/neighbourhoods.geojson').then(r => { if (!r.ok) throw new Error('neighbourhoods.geojson not found'); return r.json(); }),
-  fetch('data/summary.json').then(r => r.ok ? r.json() : {}).catch(() => ({})),   // 可选
-  fetch('data/pilots.json').then(r => r.ok ? r.json() : []).catch(() => []),      // 可选
+  fetch('data/summary.json').then(r => r.ok ? r.json() : {}).catch(() => ({})),   // optional
+  fetch('data/pilots.json').then(r => r.ok ? r.json() : []).catch(() => []),      // optional
   new Promise(res => map.on('load', res)),
 ]).then(([gj, sm, pl]) => {
   data = gj; summary = sm; pilots = pl;
   data.features.forEach(f => byId.set(f.properties.nbhd_id, f));
   const pilotIds = pilots.map(p => p.nbhd_id);
-  renderMethod();   // 先确定排名指标，再上色
+  renderMethod();   // settle the ranking measure before colouring
 
-  // promoteId：用社区编号作为要素 id，鼠标悬停高亮（feature-state）要用到
+  // promoteId: use the neighbourhood id as the feature id, needed for hover highlighting (feature-state)
   map.addSource('nb', { type: 'geojson', data, promoteId: 'nbhd_id' });
 
-  // 街道图模式的填充透明度：放大到 14.5 级时，有细节数据的社区变得几乎透明（露出细节），其他社区稍微变淡
+  // Fill opacity on the light gray map: at zoom 14.5, neighbourhoods with detail data become almost transparent (showing the detail) and the others fade slightly
   OPACITY.light = ['interpolate', ['linear'], ['zoom'],
     12.5, 0.78,
     14.5, ['case', ['in', ['get', 'nbhd_id'], ['literal', pilotIds]], 0.08, 0.6]];
 
-  // 社区图层都插在地名标注（ref）下面，这样上色后仍能看到地名
-  // 图层 1：社区填充色（分级图）
+  // All neighbourhood layers go below the labels (ref) so place names stay readable
+  // Layer 1: neighbourhood fill (choropleth)
   map.addLayer({ id: 'nb-fill', type: 'fill', source: 'nb', paint: {
     'fill-color': fillColor(metric),
     'fill-opacity': OPACITY[base],
   } }, 'ref');
-  // 图层 2：社区边界线（白色；鼠标悬停时变深色加粗）
+  // Layer 2: neighbourhood outlines (white; dark and thicker on hover)
   map.addLayer({ id: 'nb-line', type: 'line', source: 'nb', paint: {
     'line-color': ['case', ['boolean', ['feature-state', 'hover'], false], '#1d2a24', '#ffffff'],
     'line-width': LINE_W[base],
   } }, 'ref');
-  // 图层 3：前 15 名的金色描边（只画 top = true 的社区；放大后线条变粗）
+  // Layer 3: gold outline of the top 15 (top = true only; thicker when zoomed in)
   map.addLayer({ id: 'nb-top', type: 'line', source: 'nb', filter: ['==', ['get', 'top'], true],
     paint: { 'line-color': GOLD, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.2, 14, 4] } }, 'ref');
-  // 图层 4：草 / 灌木 / 树细节（插在边界线下面，放大时才加载）
+  // Layer 4: grass / shrub / tree detail (below the outlines, loaded on zoom)
   setupDetail();
 
-  // 鼠标悬停：高亮当前社区的边界，鼠标变成手形
+  // Hover: highlight the neighbourhood outline and show a pointer cursor
   map.on('mousemove', 'nb-fill', e => {
     map.getCanvas().style.cursor = 'pointer';
     const id = e.features[0].id;
@@ -639,49 +623,49 @@ Promise.all([
     if (hoverId !== null) map.setFeatureState({ source: 'nb', id: hoverId }, { hover: false });
     hoverId = null;
   });
-  // 点击社区：打开弹窗（用原始 GeoJSON 的属性，比地图渲染后的数据更完整）
-  // 如果点到的是草 / 灌木 / 树细节，交给细节图层的弹窗处理
+  // Click a neighbourhood: open its popup (using the original GeoJSON properties, which are more complete than the rendered ones)
+  // If the click hit a grass / shrub / tree patch, let the detail layer's popup handle it
   map.on('click', 'nb-fill', e => {
     if (map.getLayer('detail-fill') && map.queryRenderedFeatures(e.point, { layers: ['detail-fill'] }).length) return;
     openPopup(byId.get(e.features[0].id) || e.features[0], e.lngLat);
   });
 
-  // 切换上色指标：重新计算颜色和图例，更新列表右侧的数值
+  // Change of measure: recompute colours and legend, update the values in the list
   document.querySelectorAll('#metric input').forEach(r => r.onchange = () => {
     metric = r.value;
     map.setPaintProperty('nb-fill', 'fill-color', fillColor(metric));
     renderTopList();
   });
-  // "Outline on map" 勾选框：显示 / 隐藏前 15 名的金色描边
+  // "Outline on map" checkbox: show / hide the gold outline of the top 15
   document.getElementById('showTop').onchange = e => map.setLayoutProperty('nb-top', 'visibility', e.target.checked ? 'visible' : 'none');
   renderTopList();
-  document.getElementById('loading').remove();   // 去掉 "Loading…" 提示
+  document.getElementById('loading').remove();   // remove the "Loading…" message
 }).catch(err => {
-  // 读不到数据时（比如直接双击打开了 HTML），在地图上显示原因和解决办法
+  // If the data can't be loaded (e.g. the HTML was opened by double-clicking), explain why on the map
   document.getElementById('loading').innerHTML =
     `<div style="max-width:340px;text-align:center">Could not load data: ${err.message}.<br><br>Make sure the <code>data</code> folder sits next to <code>index.html</code>, then preview with <code>python3 -m http.server</code> in that folder.</div>`;
 });
 
 
 // =====================================================================
-// 6. 其他交互
+// 6. Other interactions
 // =====================================================================
 
-// 底图切换（地图左上角的 Satellite / Light gray）：切换底图和地名标注，同时调整社区颜色透明度和边界线粗细
+// Base map switch (Satellite / Light gray, top left): swap base map and labels, and adjust fill opacity and outline width
 document.querySelectorAll('[data-base]').forEach(b => b.onclick = () => {
   base = b.dataset.base;
   const sat = base === 'sat';
   map.setLayoutProperty('sat', 'visibility', sat ? 'visible' : 'none');
   map.setLayoutProperty('light', 'visibility', sat ? 'none' : 'visible');
-  map.setLayoutProperty('ref', 'visibility', sat ? 'none' : 'visible');   // 浅灰地名标注只配浅灰底图用
-  if (map.getLayer('nb-fill')) {   // 数据还没加载完时，社区图层还不存在
+  map.setLayoutProperty('ref', 'visibility', sat ? 'none' : 'visible');   // the light gray labels go with the light gray base map only
+  if (map.getLayer('nb-fill')) {   // the neighbourhood layers don't exist until the data has loaded
     map.setPaintProperty('nb-fill', 'fill-opacity', OPACITY[base]);
     map.setPaintProperty('nb-line', 'line-width', LINE_W[base]);
   }
   document.querySelectorAll('[data-base]').forEach(x => x.setAttribute('aria-pressed', x === b));
 });
 
-// 手机上：点拖动条展开 / 收起底部面板；一打开页面时默认收起，先让人看到地图
+// Phones: tap the handle to expand / collapse the bottom sheet; it starts collapsed so the map is visible first
 document.getElementById('handle').onclick = () => document.getElementById('panel').classList.toggle('collapsed');
 if (matchMedia('(max-width: 760px)').matches) document.getElementById('panel').classList.add('collapsed');
 </script>
