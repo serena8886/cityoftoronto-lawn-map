@@ -17,6 +17,7 @@ The map was built to help target outreach for a fall-leaf and pollinator campaig
 - **Lawn, shrub and tree detail:** for the top 15, zooming in loads vector polygons of every grass, shrub and tree patch on residential lots. Each class can be switched on or off, and clicking a patch shows its area.
 - **Base maps:** Esri satellite imagery (default) and Esri Light Gray Canvas.
 - **Street-level check:** every popup links to Google satellite view and Street View for that spot.
+- **Library branches:** all 100 Toronto Public Library branches are shown as purple points. The sidebar lists the branches inside the top 15 neighbourhoods; clicking a branch shows its address, phone number and a link for directions.
 
 ## Method
 
@@ -38,6 +39,7 @@ All datasets are from the [City of Toronto Open Data Portal](https://open.toront
 | [Property Boundaries](https://open.toronto.ca/dataset/property-boundaries/) | Lot outlines | Downloaded October 2026 |
 | [Zoning By-law](https://open.toronto.ca/dataset/zoning-by-law/) (Zoning Area layer) | Selecting low-density residential lots | Amendments to June 18, 2023 |
 | [Neighbourhoods](https://open.toronto.ca/dataset/neighbourhoods/) (158 neighbourhoods) | Neighbourhood boundaries and summaries | Current 158-neighbourhood structure |
+| [Library Branch General Information](https://open.toronto.ca/dataset/library-branch-general-information/) (Toronto Public Library) | Library branch locations and contact details | Retrieved October 2026 |
 
 Contains information licensed under the [Open Government Licence – Toronto](https://www.toronto.ca/city-government/data-research-maps/open-data/open-data-licence/).
 
@@ -59,6 +61,7 @@ index.html                    The web map (HTML, CSS and JavaScript in one file)
 data/
 ├── neighbourhoods.geojson    158 neighbourhood boundaries with all measures and ranks
 ├── summary.json              Ranking method and summary figures shown in the sidebar
+├── libraries.geojson         100 Toronto Public Library branches (points)
 ├── pilots.json               List of neighbourhoods that have detail data (top 15)
 └── pilots/<id>.json          Grass / shrub / tree polygons for one neighbourhood,
                               loaded only when the user zooms into it
