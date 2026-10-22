@@ -178,9 +178,6 @@
           <span>Visible lawn per lot<small>Grass not covered by tree canopy, on a typical lot</small></span></label>
         <label><input type="radio" name="m" value="pct_tree">
           <span>Tree canopy share<small>Tree canopy as a share of low-density residential land</small></span></label>
-        <!-- Only shown when census data (Neighbourhood Profiles) is available; removed otherwise -->
-        <label id="incomeOpt"><input type="radio" name="m" value="income_median">
-          <span>Household income<small>Median household income, 2021 Census · for reference only</small></span></label>
       </div>
       <!-- Legend: 5 colour classes; JS computes the quintile breaks and fills in #ticks -->
       <div class="legend">
@@ -239,7 +236,6 @@
           <li>Property Boundaries</li>
           <li>Zoning By-law 569-2013 (Zoning Area)</li>
           <li>Neighbourhoods (158)</li>
-          <li>Neighbourhood Profiles 2021</li>
         </ul>
         <p class="fine">All from City of Toronto Open Data. Contains information licensed under the Open Government Licence – Toronto.</p>
       </details>
@@ -278,7 +274,6 @@ const METRICS = {
   lawn_mean_m2: { label: 'Visible lawn per lot (average)', fmt: m2 },           // visible lawn, mean
   pct_tree: { label: 'Tree canopy share', fmt: v => (v * 100).toFixed(0) + '%' },  // tree canopy as a share of residential land
   pct_lawn: { label: 'Lawn share', fmt: v => (v * 100).toFixed(0) + '%' },          // lawn as a share of residential land
-  income_median: { label: 'Household income', fmt: v => '$' + (v >= 1e5 ? (v / 1e3).toFixed(0) + 'k' : Math.round(v / 1e3) + 'k') },
 };
 const pct = v => v == null ? '–' : (v * 100).toFixed(0) + '%';      // 0.123 → "12%"
 const num = v => v == null ? '–' : Math.round(v).toLocaleString();  // 1234.5 → "1,235"
@@ -390,9 +385,7 @@ function popupHTML(p, ll) {
     <div class="bar" title="Share of low-density residential land">
       <span style="width:${g * 100}%;background:var(--grass)"></span><span style="width:${s * 100}%;background:var(--shrub)"></span><span style="width:${t * 100}%;background:var(--tree)"></span></div>
     <div class="fine">Lawn ${pct(p.pct_lawn)} · Shrub ${pct(p.pct_shrub)} · Tree ${pct(p.pct_tree)} of residential land. Per-lot values are medians.</div>
-    ${p.income_median != null ? `<table style="margin-top:6px">
-      <tr><td>Median household income</td><td>$${num(p.income_median)}</td></tr>
-    </table>` : ''}${links}</div>`;
+    ${links}</div>`;
 }
 
 // Open a popup on the map (only one at a time)
@@ -461,15 +454,13 @@ function renderMethod() {
     <li>Neighbourhoods are ranked by the <b>${RANK_INFO[by][2]}</b>.${isMean ? '' : ' The median is used so a few very large lots do not dominate.'}</li>
     ${green ? '<li>Tree canopy is included because the data is a top-down view: lawn under trees is recorded as tree. Large, leafy yards are also where most fall leaves come from.</li>' : ''}
     <li>Neighbourhoods with fewer than ${summary.min_parcels || 30} residential lots are not ranked.</li>
-    ${summary.alt_overlap != null ? `<li>Check: ranking by the ${other} instead keeps ${summary.alt_overlap} of the top ${summary.top_n} the same.</li>` : ''}
-    ${summary.income_available ? '<li>Median household income (2021 Census, Neighbourhood Profiles) is shown for reference and is not part of the ranking.</li>' : ''}`;
+    ${summary.alt_overlap != null ? `<li>Check: ranking by the ${other} instead keeps ${summary.alt_overlap} of the top ${summary.top_n} the same.</li>` : ''}`;
   const r = document.getElementById('rankRadio');
   r.value = by;
   document.getElementById('rankLabel').textContent = RANK_INFO[by][0];
   document.getElementById('rankDesc').textContent = RANK_INFO[by][1];
   if (!green) document.getElementById('lawnOpt').remove();            // if ranking is already by lawn, don't show the lawn option twice
   metric = r.value;
-  if (!summary.income_available) document.getElementById('incomeOpt').remove();   // no census data → no income option
   document.querySelectorAll('.topn').forEach(el => el.textContent = summary.top_n || 15);
   document.getElementById('minp').textContent = summary.min_parcels || 30;
   if (summary.generated) document.getElementById('gen').textContent = `Data processed ${summary.generated}.`;
