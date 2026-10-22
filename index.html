@@ -3,16 +3,17 @@
   ZEOPE 院子绿地优先社区地图（网页地图）
   =====================================================================
   这个文件只负责"展示"，不做数据分析：
-    - 数据分析由 scripts/ 里的 Python 脚本完成（03 → 04 → 05 → 06）
-    - 网页只读取脚本输出到 docs/data/ 的几个小文件：
+    - 数据分析由 Python 脚本完成（03 → 04 → 05 → 06）
+    - 网页只读取和它放在一起的 data/ 文件夹里的几个小文件（脚本输出到 docs/data/，再复制过来）：
         neighbourhoods.geojson  158 个社区的边界和各项指标（05 生成）
         summary.json            排名方式、地块总数等说明信息（05 生成）
         pilots.json + pilot_*.png  试点社区的草/灌木/树细节图（06 生成，可选）
 
   用到的库：MapLibre GL JS（开源网页地图库，用法和 Mapbox GL JS 基本一样，不需要 token）
-  底图：CARTO 浅色街道图、Esri 卫星图（都是免费的，地图右下角注明了出处）
+  底图：Esri 浅灰底图 + 地名标注、Esri 卫星图（免费，不需要 API key，地图右下角注明了出处）
+  （之前用的 CARTO 底图现在要求 API key，否则会出现 "API KEY REQUIRED" 水印，所以换掉了）
 
-  本地预览：在 docs/ 文件夹里运行 python3 -m http.server，然后打开 http://localhost:8000
+  本地预览：在这个文件所在的文件夹里运行 python3 -m http.server，然后打开 http://localhost:8000
   （直接双击这个文件打不开数据，因为浏览器不允许 file:// 页面读取旁边的文件）
 -->
 <html lang="en">
@@ -309,10 +310,14 @@ const map = new maplibregl.Map({
   style: {
     version: 8,
     sources: {
-      // CARTO 浅色街道底图（免费，需注明 OpenStreetMap 和 CARTO）
-      light: { type: 'raster', tileSize: 256, maxzoom: 20,
-        tiles: ['a', 'b', 'c', 'd'].map(s => `https://${s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png`),
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>' },
+      // Esri 浅灰底图（Light Gray Canvas，免费、不需要 key）。
+      // maxzoom 16：再放大时沿用 16 级的瓦片放大显示（更高级别的瓦片很多地方没有）
+      light: { type: 'raster', tileSize: 256, maxzoom: 16,
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'],
+        attribution: 'Basemap © Esri, HERE, Garmin, © OpenStreetMap contributors' },
+      // Esri 浅灰底图的地名和街道名标注（透明背景），叠在社区颜色上面
+      ref: { type: 'raster', tileSize: 256, maxzoom: 16,
+        tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}'] },
       // Esri 卫星图（免费，需注明 Esri）
       sat: { type: 'raster', tileSize: 256, maxzoom: 19,
         tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
@@ -322,6 +327,7 @@ const map = new maplibregl.Map({
       { id: 'bg', type: 'background', paint: { 'background-color': '#f4f5f4' } },
       { id: 'light', type: 'raster', source: 'light' },
       { id: 'sat', type: 'raster', source: 'sat', layout: { visibility: 'none' } },   // 默认隐藏，点 Satellite 才显示
+      { id: 'ref', type: 'raster', source: 'ref' },   // 地名标注放在最上层；社区图层会插到它下面（见第 5 部分）
     ],
   },
 });
@@ -528,19 +534,20 @@ Promise.all([
     12.5, 0.78,
     14.5, ['case', ['in', ['get', 'nbhd_id'], ['literal', pilotIds]], 0.08, 0.6]];
 
+  // 社区图层都插在地名标注（ref）下面，这样上色后仍能看到地名
   // 图层 1：社区填充色（分级图）
   map.addLayer({ id: 'nb-fill', type: 'fill', source: 'nb', paint: {
     'fill-color': fillColor(metric),
     'fill-opacity': OPACITY[base],
-  } });
+  } }, 'ref');
   // 图层 2：社区边界线（白色；鼠标悬停时变深色加粗）
   map.addLayer({ id: 'nb-line', type: 'line', source: 'nb', paint: {
     'line-color': ['case', ['boolean', ['feature-state', 'hover'], false], '#1d2a24', '#ffffff'],
     'line-width': LINE_W[base],
-  } });
+  } }, 'ref');
   // 图层 3：前 15 名的金色描边（只画 top = true 的社区；放大后线条变粗）
   map.addLayer({ id: 'nb-top', type: 'line', source: 'nb', filter: ['==', ['get', 'top'], true],
-    paint: { 'line-color': GOLD, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.2, 14, 4] } });
+    paint: { 'line-color': GOLD, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.2, 14, 4] } }, 'ref');
   // 图层 4：试点细节图（插在边界线下面）
   addPilots();
 
@@ -572,7 +579,7 @@ Promise.all([
 }).catch(err => {
   // 读不到数据时（比如直接双击打开了 HTML），在地图上显示原因和解决办法
   document.getElementById('loading').innerHTML =
-    `<div style="max-width:340px;text-align:center">Could not load data: ${err.message}.<br><br>Run the Python scripts first, then preview with <code>python -m http.server</code> inside the <code>docs</code> folder.</div>`;
+    `<div style="max-width:340px;text-align:center">Could not load data: ${err.message}.<br><br>Make sure the <code>data</code> folder sits next to <code>index.html</code>, then preview with <code>python3 -m http.server</code> in that folder.</div>`;
 });
 
 
@@ -580,12 +587,13 @@ Promise.all([
 // 6. 其他交互
 // =====================================================================
 
-// 底图切换（地图左上角的 Map / Satellite）：切换底图，同时调整社区颜色透明度和边界线粗细
+// 底图切换（地图左上角的 Map / Satellite）：切换底图和地名标注，同时调整社区颜色透明度和边界线粗细
 document.querySelectorAll('[data-base]').forEach(b => b.onclick = () => {
   base = b.dataset.base;
   const sat = base === 'sat';
   map.setLayoutProperty('sat', 'visibility', sat ? 'visible' : 'none');
   map.setLayoutProperty('light', 'visibility', sat ? 'none' : 'visible');
+  map.setLayoutProperty('ref', 'visibility', sat ? 'none' : 'visible');   // 浅灰地名标注只配浅灰底图用
   if (map.getLayer('nb-fill')) {   // 数据还没加载完时，社区图层还不存在
     map.setPaintProperty('nb-fill', 'fill-opacity', OPACITY[base]);
     map.setPaintProperty('nb-line', 'line-width', LINE_W[base]);
