@@ -10,7 +10,7 @@
         pilots.json + pilots/<编号>.json  前 15 名社区的草/灌木/树矢量细节（06 生成，可选；放大到社区时才加载）
 
   用到的库：MapLibre GL JS（开源网页地图库，用法和 Mapbox GL JS 基本一样，不需要 token）
-  底图：Esri 浅灰底图 + 地名标注、Esri 卫星图（免费，不需要 API key，地图右下角注明了出处）
+  底图：Esri 卫星图（默认）、Esri 浅灰底图 + 地名标注（免费，不需要 API key，地图右下角注明了出处）
   （之前用的 CARTO 底图现在要求 API key，否则会出现 "API KEY REQUIRED" 水印，所以换掉了）
 
   本地预览：在这个文件所在的文件夹里运行 python3 -m http.server，然后打开 http://localhost:8000
@@ -122,7 +122,7 @@
   /* =====================================================================
      地图上的元素
      ===================================================================== */
-  /* 地图左上角的 Map / Satellite 切换按钮 */
+  /* 地图左上角的 Satellite / Light gray 切换按钮 */
   .basectl { position: absolute; top: 10px; left: 10px; z-index: 2; display: flex; background: #fff;
     border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.25); overflow: hidden; }
   .basectl button { font: 600 13px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; border: 0;
@@ -219,7 +219,7 @@
     <!-- 草 / 灌木 / 树细节（矢量）。没有 pilots.json 时整个区块保持隐藏 -->
     <section id="pilotSection" hidden>
       <h2>Lawn, shrub and tree detail</h2>
-      <p class="fine" style="margin-top:0">Available for the top <span class="topn">15</span> neighbourhoods. Zoom in, or click a name in the list above, and the detail loads automatically. Click any patch to see its size. Switch to Satellite (top left of the map) to compare with real imagery.</p>
+      <p class="fine" style="margin-top:0">Available for the top <span class="topn">15</span> neighbourhoods. Zoom in, or click a name in the list above, and the detail loads automatically. Click any patch to see its size. Lower the opacity below to compare with the satellite imagery underneath.</p>
       <!-- 三个勾选框：分别显示 / 隐藏草、灌木、树 -->
       <div class="keys detail-toggles">
         <label><input type="checkbox" data-cls="grass" checked><span class="sw" style="background:var(--grass)"></span>Lawn (grass)</label>
@@ -268,10 +268,10 @@
        地图区域
        ===================================================================== -->
   <div id="map"><div id="loading">Loading…</div>
-    <!-- 左上角的底图切换按钮 -->
+    <!-- 左上角的底图切换按钮：默认卫星图，浅灰底图是第二选择 -->
     <div class="basectl" role="group" aria-label="Base map">
-      <button data-base="light" aria-pressed="true">Map</button>
-      <button data-base="sat" aria-pressed="false">Satellite</button>
+      <button data-base="sat" aria-pressed="true">Satellite</button>
+      <button data-base="light" aria-pressed="false">Light gray</button>
     </div>
   </div>
 </div>
@@ -329,9 +329,10 @@ const map = new maplibregl.Map({
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#f4f5f4' } },
-      { id: 'light', type: 'raster', source: 'light' },
-      { id: 'sat', type: 'raster', source: 'sat', layout: { visibility: 'none' } },   // 默认隐藏，点 Satellite 才显示
-      { id: 'ref', type: 'raster', source: 'ref' },   // 地名标注放在最上层；社区图层会插到它下面（见第 5 部分）
+      // 默认显示卫星图；浅灰底图和地名标注默认隐藏，点 "Light gray" 才显示
+      { id: 'light', type: 'raster', source: 'light', layout: { visibility: 'none' } },
+      { id: 'sat', type: 'raster', source: 'sat' },
+      { id: 'ref', type: 'raster', source: 'ref', layout: { visibility: 'none' } },   // 地名标注放在最上层；社区图层会插到它下面（见第 5 部分）
     ],
   },
 });
@@ -341,7 +342,7 @@ map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
 // 社区填充色的透明度，按底图不同而不同：
 //   sat（卫星图）：越放大越透明，放大到街区级别（zoom 14）完全透明，只留边界线，方便看实景
 //   light（街道图）：在数据加载后设置（见第 5 部分），试点社区放大后会变淡，露出细节图
-const OPACITY = { sat: ['interpolate', ['linear'], ['zoom'], 10, 0.5, 12.5, 0.25, 14, 0] };
+const OPACITY = { sat: ['interpolate', ['linear'], ['zoom'], 10, 0.65, 12.5, 0.3, 14, 0] };
 // 社区边界线的粗细：鼠标悬停时加粗；卫星图模式下整体更粗，方便看清
 const LINE_W = {
   light: ['case', ['boolean', ['feature-state', 'hover'], false], 2, 0.7],
@@ -349,7 +350,7 @@ const LINE_W = {
 };
 
 // 全局状态
-let base = 'light';                 // 当前底图：'light' 或 'sat'
+let base = 'sat';                   // 当前底图：'sat'（卫星图，默认）或 'light'（浅灰底图）
 let data, summary = {}, pilots = [], metric = 'green_median_m2', hoverId = null;
 const byId = new Map();             // 社区编号 → GeoJSON 要素，方便按编号查找
 
@@ -666,7 +667,7 @@ Promise.all([
 // 6. 其他交互
 // =====================================================================
 
-// 底图切换（地图左上角的 Map / Satellite）：切换底图和地名标注，同时调整社区颜色透明度和边界线粗细
+// 底图切换（地图左上角的 Satellite / Light gray）：切换底图和地名标注，同时调整社区颜色透明度和边界线粗细
 document.querySelectorAll('[data-base]').forEach(b => b.onclick = () => {
   base = b.dataset.base;
   const sat = base === 'sat';
