@@ -7,7 +7,7 @@
     - 网页只读取和它放在一起的 data/ 文件夹里的几个小文件（脚本输出到 docs/data/，再复制过来）：
         neighbourhoods.geojson  158 个社区的边界和各项指标（05 生成）
         summary.json            排名方式、地块总数等说明信息（05 生成）
-        pilots.json + pilot_*.png  试点社区的草/灌木/树细节图（06 生成，可选）
+        pilots.json + pilots/<编号>.json  前 15 名社区的草/灌木/树矢量细节（06 生成，可选；放大到社区时才加载）
 
   用到的库：MapLibre GL JS（开源网页地图库，用法和 Mapbox GL JS 基本一样，不需要 token）
   底图：Esri 浅灰底图 + 地名标注、Esri 卫星图（免费，不需要 API key，地图右下角注明了出处）
@@ -115,6 +115,9 @@
   details ul { padding-left: 18px; margin: 6px 0; }
   .fine { font-size: 12px; color: var(--muted); }
   .empty { color: var(--muted); font-size: 13px; }
+  .detail-toggles { margin: 10px 0 8px; }
+  .detail-toggles label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: var(--ink); }
+  .detail-toggles input { margin: 0; accent-color: var(--accent); }
 
   /* =====================================================================
      地图上的元素
@@ -213,19 +216,20 @@
       <ol class="top" id="toplist" style="margin-top:8px"></ol>
     </section>
 
-    <!-- 试点社区细节图。没有 pilots.json 时整个区块保持隐藏 -->
+    <!-- 草 / 灌木 / 树细节（矢量）。没有 pilots.json 时整个区块保持隐藏 -->
     <section id="pilotSection" hidden>
       <h2>Lawn, shrub and tree detail</h2>
-      <p class="fine" style="margin-top:0">Pixel-level land cover on residential lots in pilot neighbourhoods. Switch to Satellite (top left of the map) to compare with real imagery.</p>
-      <div class="btns" id="pilotBtns"></div>
-      <div class="keys" style="margin:10px 0 8px">
-        <span><span class="sw" style="background:var(--grass)"></span>Lawn (grass)</span>
-        <span><span class="sw" style="background:var(--shrub)"></span>Shrub</span>
-        <span><span class="sw" style="background:var(--tree)"></span>Tree</span>
+      <p class="fine" style="margin-top:0">Available for the top <span class="topn">15</span> neighbourhoods. Zoom in, or click a name in the list above, and the detail loads automatically. Click any patch to see its size. Switch to Satellite (top left of the map) to compare with real imagery.</p>
+      <!-- 三个勾选框：分别显示 / 隐藏草、灌木、树 -->
+      <div class="keys detail-toggles">
+        <label><input type="checkbox" data-cls="grass" checked><span class="sw" style="background:var(--grass)"></span>Lawn (grass)</label>
+        <label><input type="checkbox" data-cls="shrub" checked><span class="sw" style="background:var(--shrub)"></span>Shrub</label>
+        <label><input type="checkbox" data-cls="tree" checked><span class="sw" style="background:var(--tree)"></span>Tree</label>
       </div>
-      <!-- 细节图透明度：拉到最左边就能完全看到下面的卫星图 -->
+      <!-- 细节图层透明度：拉到最左边就能完全看到下面的卫星图 -->
       <label class="fine" for="opacity">Detail layer opacity</label>
       <input type="range" id="opacity" min="0" max="100" value="85">
+      <p class="fine" id="detailStatus" style="margin:6px 0 0"></p>
     </section>
 
     <!-- 方法、局限、数据来源。Method 的内容由 renderMethod 根据 summary.json 生成 -->
@@ -430,6 +434,8 @@ function flyToNbhd(id) {
   const b = bbox(f.geometry);
   map.fitBounds(b, { padding: 60, maxZoom: 14.5 });
   openPopup(f, [(b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2]);
+  const p = pilots.find(x => x.nbhd_id === id);   // 有细节数据的社区：顺便加载
+  if (p) loadDetail(p);
   if (matchMedia('(max-width: 760px)').matches) document.getElementById('panel').classList.add('collapsed');   // 手机上收起面板
 }
 
@@ -484,31 +490,100 @@ function renderMethod() {
   if (summary.generated) document.getElementById('gen').textContent = `Data processed ${summary.generated}.`;
 }
 
-// 把试点社区的细节图（透明 PNG）加到地图上，并生成对应的按钮和透明度滑块
-function addPilots() {
+// ---------------------------------------------------------------------
+// 草 / 灌木 / 树细节（矢量）
+//   pilots.json 列出有细节数据的社区（默认前 15 名），每个社区一个文件 data/pilots/<编号>.json。
+//   为了让网页打开得快，一开始不加载这些文件：放大到某个社区（或点列表里的名字）时才去读，
+//   读进来的多边形都放进同一个图层 detail-fill。
+// ---------------------------------------------------------------------
+const DETAIL_COLORS = { grass: '#a3d977', shrub: '#808000', tree: '#226633' };   // 和 CSS 的 --grass / --shrub / --tree 一致
+const DETAIL_LABELS = { grass: 'Lawn (grass)', shrub: 'Shrub', tree: 'Tree canopy' };
+const DETAIL_AUTOLOAD_ZOOM = 12.5;      // 放大到这个级别以上，自动加载画面里的社区
+const detailState = new Map();          // 社区编号 → 'loading' / 'done'
+const detailFC = { type: 'FeatureCollection', features: [] };   // 已加载的所有细节多边形
+const detailOn = { grass: true, shrub: true, tree: true };      // 三个勾选框的状态
+
+// 只显示勾选了的类别
+function detailFilter() {
+  return ['in', ['get', 'cls'], ['literal', Object.keys(detailOn).filter(k => detailOn[k])]];
+}
+
+function detailStatus() {
+  const done = [...detailState.values()].filter(v => v === 'done').length;
+  const loading = [...detailState.values()].some(v => v === 'loading');
+  document.getElementById('detailStatus').textContent =
+    (loading ? 'Loading… ' : '') + `Detail loaded for ${done} of ${pilots.length} neighbourhoods.`;
+}
+
+// 读取一个社区的细节文件，并加进 detail 图层
+async function loadDetail(p) {
+  if (detailState.has(p.nbhd_id)) return;       // 已经读过或正在读
+  detailState.set(p.nbhd_id, 'loading'); detailStatus();
+  try {
+    const r = await fetch(p.file);
+    if (!r.ok) throw new Error(r.status);
+    const gj = await r.json();
+    gj.features.forEach(f => { f.properties.nbhd = p.name; });   // 记下属于哪个社区，弹窗里显示
+    detailFC.features.push(...gj.features);
+    map.getSource('detail').setData(detailFC);
+    detailState.set(p.nbhd_id, 'done');
+  } catch (err) {
+    detailState.delete(p.nbhd_id);              // 读取失败：下次移动地图时再试
+    console.warn('Could not load detail for', p.name, err);
+  }
+  detailStatus();
+}
+
+// 地图停止移动后：如果已经放大到一定程度，加载画面范围内的社区
+function loadVisibleDetail() {
+  if (map.getZoom() < DETAIL_AUTOLOAD_ZOOM) return;
+  const v = map.getBounds();
+  pilots.forEach(p => {
+    const [w, s, e, n] = p.bounds;              // 社区细节数据的范围 [西, 南, 东, 北]
+    const visible = !(e < v.getWest() || w > v.getEast() || n < v.getSouth() || s > v.getNorth());
+    if (visible) loadDetail(p);
+  });
+}
+
+// 点击单块草地 / 灌木 / 树冠时的弹窗
+function detailPopupHTML(f, ll) {
+  const at = `${ll.lat.toFixed(6)},${ll.lng.toFixed(6)}`;
+  const c = f.properties.cls;
+  return `<div class="pp"><h3><span class="sw" style="background:${DETAIL_COLORS[c]}"></span>${DETAIL_LABELS[c] || c}</h3>
+    <div class="meta">${f.properties.nbhd || ''}</div>
+    <table><tr><td>Area of this patch</td><td>${num(f.properties.area_m2)} m²</td></tr></table>
+    <div class="fine">From the 2018 land cover data, clipped to low-density residential lots.</div>
+    <div class="links">
+      <a href="https://www.google.com/maps/@?api=1&map_action=map&center=${at}&zoom=19&basemap=satellite" target="_blank" rel="noopener">Google satellite ↗</a>
+      <a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${at}" target="_blank" rel="noopener">Street View ↗</a></div></div>`;
+}
+
+// 建立细节图层、勾选框、透明度滑块，并开始监听地图移动
+function setupDetail() {
   if (!pilots.length) return;
   document.getElementById('pilotSection').hidden = false;
-  const btns = document.getElementById('pilotBtns');
-  pilots.forEach(p => {
-    const id = 'pilot-' + p.nbhd_id;
-    // image 图层：按 pilots.json 里的四个角坐标贴到地图上
-    map.addSource(id, { type: 'image', url: p.image, coordinates: p.coordinates });
-    // 插在边界线图层（nb-line）下面，这样边界线仍然显示在细节图上方；
-    // 'nearest' 让像素保持锐利，不被模糊
-    map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-opacity': 0.85, 'raster-resampling': 'nearest', 'raster-fade-duration': 0 } }, 'nb-line');
-    const b = document.createElement('button');
-    b.className = 'chip'; b.textContent = p.name;
-    b.onclick = () => {   // 点击按钮缩放到这张细节图
-      const xs = p.coordinates.map(c => c[0]), ys = p.coordinates.map(c => c[1]);
-      map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: 40 });
-      popup.remove();
-      if (matchMedia('(max-width: 760px)').matches) document.getElementById('panel').classList.add('collapsed');
-    };
-    btns.appendChild(b);
+  map.addSource('detail', { type: 'geojson', data: detailFC });
+  // 插在社区边界线（nb-line）下面；缩小到 11 级以下就不显示（太小看不清）
+  map.addLayer({ id: 'detail-fill', type: 'fill', source: 'detail', minzoom: 11, filter: detailFilter(), paint: {
+    'fill-color': ['match', ['get', 'cls'], 'grass', DETAIL_COLORS.grass, 'shrub', DETAIL_COLORS.shrub, 'tree', DETAIL_COLORS.tree, '#999999'],
+    'fill-opacity': 0.85,
+  } }, 'nb-line');
+
+  document.querySelectorAll('.detail-toggles input').forEach(cb => cb.onchange = () => {
+    detailOn[cb.dataset.cls] = cb.checked;
+    map.setFilter('detail-fill', detailFilter());
   });
-  document.getElementById('opacity').oninput = e => {   // 拖动滑块时调整所有细节图的透明度
-    pilots.forEach(p => map.setPaintProperty('pilot-' + p.nbhd_id, 'raster-opacity', e.target.value / 100));
-  };
+  document.getElementById('opacity').oninput = e =>
+    map.setPaintProperty('detail-fill', 'fill-opacity', e.target.value / 100);
+
+  map.on('click', 'detail-fill', e => {
+    popup.remove();
+    popup = new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(e.lngLat).setHTML(detailPopupHTML(e.features[0], e.lngLat)).addTo(map);
+  });
+  map.on('mouseenter', 'detail-fill', () => { map.getCanvas().style.cursor = 'pointer'; });
+  map.on('moveend', loadVisibleDetail);
+  loadVisibleDetail();
+  detailStatus();
 }
 
 
@@ -529,7 +604,7 @@ Promise.all([
   // promoteId：用社区编号作为要素 id，鼠标悬停高亮（feature-state）要用到
   map.addSource('nb', { type: 'geojson', data, promoteId: 'nbhd_id' });
 
-  // 街道图模式的填充透明度：放大到 14.5 级时，试点社区变得几乎透明（露出细节图），其他社区稍微变淡
+  // 街道图模式的填充透明度：放大到 14.5 级时，有细节数据的社区变得几乎透明（露出细节），其他社区稍微变淡
   OPACITY.light = ['interpolate', ['linear'], ['zoom'],
     12.5, 0.78,
     14.5, ['case', ['in', ['get', 'nbhd_id'], ['literal', pilotIds]], 0.08, 0.6]];
@@ -548,8 +623,8 @@ Promise.all([
   // 图层 3：前 15 名的金色描边（只画 top = true 的社区；放大后线条变粗）
   map.addLayer({ id: 'nb-top', type: 'line', source: 'nb', filter: ['==', ['get', 'top'], true],
     paint: { 'line-color': GOLD, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.2, 14, 4] } }, 'ref');
-  // 图层 4：试点细节图（插在边界线下面）
-  addPilots();
+  // 图层 4：草 / 灌木 / 树细节（插在边界线下面，放大时才加载）
+  setupDetail();
 
   // 鼠标悬停：高亮当前社区的边界，鼠标变成手形
   map.on('mousemove', 'nb-fill', e => {
@@ -564,7 +639,11 @@ Promise.all([
     hoverId = null;
   });
   // 点击社区：打开弹窗（用原始 GeoJSON 的属性，比地图渲染后的数据更完整）
-  map.on('click', 'nb-fill', e => openPopup(byId.get(e.features[0].id) || e.features[0], e.lngLat));
+  // 如果点到的是草 / 灌木 / 树细节，交给细节图层的弹窗处理
+  map.on('click', 'nb-fill', e => {
+    if (map.getLayer('detail-fill') && map.queryRenderedFeatures(e.point, { layers: ['detail-fill'] }).length) return;
+    openPopup(byId.get(e.features[0].id) || e.features[0], e.lngLat);
+  });
 
   // 切换上色指标：重新计算颜色和图例，更新列表右侧的数值
   document.querySelectorAll('#metric input').forEach(r => r.onchange = () => {

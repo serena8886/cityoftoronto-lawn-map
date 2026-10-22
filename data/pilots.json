@@ -3,60 +3,255 @@
     "nbhd_id": 139,
     "name": "Scarborough Village",
     "rank": 1,
-    "image": "data/pilot_139.png",
-    "coordinates": [
-      [
-        -79.227741,
-        43.750742
-      ],
-      [
-        -79.205438,
-        43.750742
-      ],
-      [
-        -79.205438,
-        43.727943
-      ],
-      [
-        -79.227741,
-        43.727943
-      ]
+    "file": "data/pilots/139.json",
+    "bounds": [
+      -79.227741,
+      43.727974,
+      -79.205445,
+      43.750742
     ],
-    "ground_res_m": 0.63,
     "shares": {
       "grass": 0.111,
       "shrub": 0.022,
-      "tree": 0.523
+      "tree": 0.521
     }
   },
   {
     "nbhd_id": 41,
     "name": "Bridle Path-Sunnybrook-York Mills",
     "rank": 2,
-    "image": "data/pilot_41.png",
-    "coordinates": [
-      [
-        -79.405305,
-        43.747467
-      ],
-      [
-        -79.354542,
-        43.747467
-      ],
-      [
-        -79.354542,
-        43.711473
-      ],
-      [
-        -79.405305,
-        43.711473
-      ]
+    "file": "data/pilots/41.json",
+    "bounds": [
+      -79.405305,
+      43.711476,
+      -79.354555,
+      43.74746
     ],
-    "ground_res_m": 1.02,
     "shares": {
-      "grass": 0.066,
+      "grass": 0.065,
       "shrub": 0.016,
-      "tree": 0.54
+      "tree": 0.539
+    }
+  },
+  {
+    "nbhd_id": 9,
+    "name": "Edenbridge-Humber Valley",
+    "rank": 3,
+    "file": "data/pilots/9.json",
+    "bounds": [
+      -79.538639,
+      43.652278,
+      -79.50997,
+      43.683237
+    ],
+    "shares": {
+      "grass": 0.067,
+      "shrub": 0.011,
+      "tree": 0.509
+    }
+  },
+  {
+    "nbhd_id": 40,
+    "name": "St.Andrew-Windfields",
+    "rank": 4,
+    "file": "data/pilots/40.json",
+    "bounds": [
+      -79.407647,
+      43.744284,
+      -79.360977,
+      43.765503
+    ],
+    "shares": {
+      "grass": 0.056,
+      "shrub": 0.01,
+      "tree": 0.455
+    }
+  },
+  {
+    "nbhd_id": 10,
+    "name": "Princess-Rosethorn",
+    "rank": 5,
+    "file": "data/pilots/10.json",
+    "bounds": [
+      -79.561615,
+      43.651376,
+      -79.526848,
+      43.678838
+    ],
+    "shares": {
+      "grass": 0.085,
+      "shrub": 0.013,
+      "tree": 0.443
+    }
+  },
+  {
+    "nbhd_id": 53,
+    "name": "Henry Farm",
+    "rank": 6,
+    "file": "data/pilots/53.json",
+    "bounds": [
+      -79.360081,
+      43.767301,
+      -79.346526,
+      43.774097
+    ],
+    "shares": {
+      "grass": 0.055,
+      "shrub": 0.008,
+      "tree": 0.452
+    }
+  },
+  {
+    "nbhd_id": 150,
+    "name": "Fenside-Parkwoods",
+    "rank": 7,
+    "file": "data/pilots/150.json",
+    "bounds": [
+      -79.336476,
+      43.752905,
+      -79.320316,
+      43.76644
+    ],
+    "shares": {
+      "grass": 0.063,
+      "shrub": 0.008,
+      "tree": 0.462
+    }
+  },
+  {
+    "nbhd_id": 42,
+    "name": "Banbury-Don Mills",
+    "rank": 8,
+    "file": "data/pilots/42.json",
+    "bounds": [
+      -79.382223,
+      43.720561,
+      -79.331668,
+      43.752716
+    ],
+    "shares": {
+      "grass": 0.058,
+      "shrub": 0.01,
+      "tree": 0.463
+    }
+  },
+  {
+    "nbhd_id": 52,
+    "name": "Bayview Village",
+    "rank": 9,
+    "file": "data/pilots/52.json",
+    "bounds": [
+      -79.391704,
+      43.764998,
+      -79.367959,
+      43.789583
+    ],
+    "shares": {
+      "grass": 0.068,
+      "shrub": 0.01,
+      "tree": 0.416
+    }
+  },
+  {
+    "nbhd_id": 158,
+    "name": "Islington",
+    "rank": 10,
+    "file": "data/pilots/158.json",
+    "bounds": [
+      -79.563814,
+      43.631225,
+      -79.527293,
+      43.659712
+    ],
+    "shares": {
+      "grass": 0.102,
+      "shrub": 0.015,
+      "tree": 0.403
+    }
+  },
+  {
+    "nbhd_id": 123,
+    "name": "Cliffcrest",
+    "rank": 11,
+    "file": "data/pilots/123.json",
+    "bounds": [
+      -79.250937,
+      43.701607,
+      -79.216263,
+      43.740309
+    ],
+    "shares": {
+      "grass": 0.104,
+      "shrub": 0.018,
+      "tree": 0.453
+    }
+  },
+  {
+    "nbhd_id": 37,
+    "name": "Willowdale West",
+    "rank": 12,
+    "file": "data/pilots/37.json",
+    "bounds": [
+      -79.441737,
+      43.76332,
+      -79.416249,
+      43.778476
+    ],
+    "shares": {
+      "grass": 0.113,
+      "shrub": 0.019,
+      "tree": 0.365
+    }
+  },
+  {
+    "nbhd_id": 149,
+    "name": "Parkwoods-O'Connor Hills",
+    "rank": 13,
+    "file": "data/pilots/149.json",
+    "bounds": [
+      -79.346634,
+      43.740732,
+      -79.311404,
+      43.763177
+    ],
+    "shares": {
+      "grass": 0.069,
+      "shrub": 0.012,
+      "tree": 0.413
+    }
+  },
+  {
+    "nbhd_id": 140,
+    "name": "Guildwood",
+    "rank": 14,
+    "file": "data/pilots/140.json",
+    "bounds": [
+      -79.210937,
+      43.736288,
+      -79.172854,
+      43.758209
+    ],
+    "shares": {
+      "grass": 0.099,
+      "shrub": 0.015,
+      "tree": 0.439
+    }
+  },
+  {
+    "nbhd_id": 36,
+    "name": "Newtonbrook West",
+    "rank": 15,
+    "file": "data/pilots/36.json",
+    "bounds": [
+      -79.445984,
+      43.774789,
+      -79.41856,
+      43.794235
+    ],
+    "shares": {
+      "grass": 0.117,
+      "shrub": 0.02,
+      "tree": 0.33
     }
   }
 ]
