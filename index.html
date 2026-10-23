@@ -23,7 +23,6 @@
     --accent: #1f6b45;       /* main colour (dark green) for selected states and buttons */
     --accent-soft: #e8f3ec;  /* light background of the main colour */
     --gold: #e0a100;         /* gold outline of the top 15 */
-    --draft: #b3261e;        /* red of the "Draft" label */
     /* 5 greens of the choropleth, light to dark (keep in sync with COLORS in the JS below) */
     --c0: #edf8e9; --c1: #bae4b3; --c2: #74c476; --c3: #31a354; --c4: #006d2c;
     --na: #d4d8d6;           /* neighbourhoods not ranked (grey) */
@@ -47,8 +46,6 @@
     overflow-y: auto; display: flex; flex-direction: column; }
   .sheet-handle { display: none; }   /* drag handle, shown on phones only */
   header { padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
-  .draft { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
-    color: var(--draft); border: 1px solid currentColor; border-radius: 3px; padding: 1px 6px; margin-bottom: 8px; }
   h1 { font-size: 19px; line-height: 1.25; margin: 0 0 4px; }
   .sub { color: var(--muted); margin: 0; font-size: 13px; }
   section { padding: 14px 20px; border-bottom: 1px solid var(--line); }
@@ -165,9 +162,8 @@
     <!-- On phones, tap this handle to expand / collapse the panel -->
     <button class="sheet-handle" id="handle" aria-label="Show or hide panel"><span></span></button>
 
-    <!-- Title. Remove the "Draft" label once the map is public -->
+    <!-- Title -->
     <header>
-      <div class="draft">Draft – for internal review</div>
       <h1>Where Toronto's big green yards are</h1>
       <p class="sub">Priority neighbourhoods for the ZEOPE “Leave the Leaves for Pollinators” seed-card mail-out</p>
     </header>
